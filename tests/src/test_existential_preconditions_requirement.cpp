@@ -182,6 +182,59 @@ void _checkExistsInGoalThatCanBeSatisfied()
 }
 
 
+
+void _checkExistsInGoalWithListExpression()
+{
+  const std::string action1 = "action1";
+
+  ogp::Ontology ontology;
+  ontology.types = ogp::SetOfTypes::fromPddl("t1\n"
+                                             "t2");
+  ontology.constants = ogp::SetOfEntities::fromPddl("v1a v1b v1c - t1\n"
+                                                    "v2a - t2\n", ontology.types);
+  ontology.predicates = ogp::SetOfPredicates::fromStr(_fact_a + "(?v1 - t1) - t2\n" +
+                                                      _fact_b + "(?v1 - t1)", ontology.types);
+
+  std::map<std::string, ogp::Action> actions;
+  std::vector<ogp::Parameter> actionParameters{_parameter("?v1 - t1", ontology), _parameter("?v2 - t2", ontology)};
+  ogp::Action actionObj1({}, _worldStateModification_fromStr(_fact_a + "(?v1)=?v2", ontology, actionParameters));
+  actionObj1.parameters = std::move(actionParameters);
+  actions.emplace(action1, actionObj1);
+
+  ogp::Domain domain(std::move(actions), ontology);
+  auto& setOfEventsMap = domain.getSetOfEvents();
+  ogp::Problem problem;
+  _setGoalsForAPriority(problem, {_pddlGoal("(exists (?v1 - t1) (and (" + _fact_b + " v1b) (= (" + _fact_a + " ?v1) v2a)))", ontology)});
+  _addFact(problem.worldState, _fact_b + "(v1b)", problem.goalStack, ontology, setOfEventsMap, _now);
+  EXPECT_EQ("action1(?v1 -> v1b, ?v2 -> v2a)", _lookForAnActionToDoThenNotify(problem, domain, _now).actionInvocation.toStr());
+  EXPECT_EQ("", _lookForAnActionToDoThenNotify(problem, domain, _now).actionInvocation.toStr());
+}
+
+
+void _checkExistsInGoalThatCannotBeSatisfied()
+{
+  const std::string action1 = "action1";
+
+  ogp::Ontology ontology;
+  ontology.types = ogp::SetOfTypes::fromPddl("t1\n"
+                                             "t2");
+  ontology.constants = ogp::SetOfEntities::fromPddl("v1a - t1\n"
+                                                    "v2a - t2\n", ontology.types);
+  ontology.predicates = ogp::SetOfPredicates::fromStr(_fact_a + "(?v1 - t1) - t2", ontology.types);
+
+  std::map<std::string, ogp::Action> actions;
+  std::vector<ogp::Parameter> actionParameters{_parameter("?v1 - t1", ontology), _parameter("?v2 - t2", ontology)};
+  ogp::Action actionObj1({}, _worldStateModification_fromStr(_fact_a + "(?v1)=?v2", ontology, actionParameters));
+  actionObj1.parameters = std::move(actionParameters);
+  actions.emplace(action1, actionObj1);
+
+  ogp::Domain domain(std::move(actions), ontology);
+  ogp::Problem problem;
+  _setGoalsForAPriority(problem, {_pddlGoal("(exists (?v1 - t1) (= (" + _fact_a + " ?v1) undefined))", ontology)});
+
+  EXPECT_EQ("", _lookForAnActionToDoThenNotify(problem, domain, _now).actionInvocation.toStr());
+}
+
 void _checkExistsWithActionParameterInvolved()
 {
   const std::string action1 = "action1";
@@ -452,7 +505,11 @@ void _actionToSatisfyANotExists()
 TEST(Planner, test_existentialPreconditionsRequirement)
 {
   _checkSimpleExists();
-  _checkExistsInGoalThatCanBeSatisfied();
+  _checkExistsInGoalThatCanBeSatisfied();  
+
+  _checkExistsInGoalWithListExpression();
+  _checkExistsInGoalThatCannotBeSatisfied();
+
   _checkExistsWithActionParameterInvolved();
   _checkExistsWithManyFactsInvolved();
   _doAnActionToSatisfyAnExists();
